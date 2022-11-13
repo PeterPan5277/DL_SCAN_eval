@@ -9,17 +9,17 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn as nn
 os.environ['CUDA_LAUNCH_BLOCKING'] ='1'
-os.environ['CUDA_VISIBLE_DEVICES']="0"
-
+os.environ['CUDA_VISIBLE_DEVICES']="1" #指定要用哪顆GPU
 os.environ['ROOT_DATA_DIR']='/wk171/peterpan/SCAN/'
 sys.path.append("/wk171/peterpan/SCAN/SCAN_train/")
+sys.path.append("/wk171/peterpan/SCAN/SCAN_eval/")
 from data_loaders.data_loader_all_loaded import DataLoaderAllLoaded
 from datetime import datetime
 from utils.run_utils import checkpoint_parser, get_model
 from core.enum import DataType
 from models.loss import Focalloss
 #這邊要改時間, sampling rate 改成1
-s = datetime(2019,1,1,0,0)
+s = datetime(2021,1,1,0,0)       #規劃2019-2020當test找thresholds each points then 2021 test results
 e = datetime(2021,12,31,23,50)   #if for 2021/06/01->2021/06/30原先個案
 input_shape=(120,120) #120.120
 num_workers = 8
@@ -31,30 +31,34 @@ Root = '/wk171/peterpan/'
 
 #輸入資料Radar+ maxpool
 #ADV+BCEwithlogits
-#checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-16_lt-16_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-97_epoch=8_val_loss=0.039656.ckpt'
+#checkpoint_test = Root+''
 #ADV+FOCAL(a=0.999,g=2)(OK)
-#checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-16_lt-15_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-117_epoch=2_val_loss=0.000347.ckpt'
+#checkpoint_test = Root+''
 
 
 #輸入資料SCAN+ maxpool
 #ADV+FOCAL(a=0.999,g=2)(OK)
-#checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-256_lt-15_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-0_epoch=5_val_loss=0.000433.ckpt'
+#checkpoint_test = Root+''
 
 
 
 # 輸入資料SR+ maxpool
-#ADV+FOCAL(a=0.999,g=2)(OK)
-checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-272_lt-15_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-0_epoch=5_val_loss=0.000353.ckpt'
+#BCEwithlogits:
+#checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-272_lt-16_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-0_epoch=8_val_loss=0.035898.ckpt'
+#ADV+FOCAL(a=0.25,g=1)(OK)
+checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-272_lt-15_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-159_epoch=7_val_loss=0.006379.ckpt'
 #ADV+FOCAL(a=0.99,g=2) (OK)
-#checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-272_lt-15_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-99_epoch=3_val_loss=0.001318.ckpt'
-
+#checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-272_lt-15_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-121_epoch=4_val_loss=0.001251.ckpt'
+#ADV+FOCAL(a=0.25,g=2) (OK)
+#checkpoint_test = Root+'SCAN_checkpoints/RF_10101_41231_mt-19_dt-272_lt-15_tlen-1_la-0_lsz-5_res-0_ilen-6_scan-1_maxpool_atlast-1_AdvW-0.01_DisD-3_v-0_epoch=8_val_loss=0.003501.ckpt'
 ##TODO
 mp='YES' ##maxpool or not /YES or NO
 losstype = 'FOCAL' # FOCAL or BCE
-a=0.999
-g=2
+a=0.25
+g=1
 input_d = 'SR' #SCAN OR RADAR OR SR
 maxpool_atlast = int(1) # 1(YES) or 0(NO)
+testing = '2021' #2021 testing 2019-2020找thresholds /若是2021代表是要testing組/201920代表找threshold組
 
 kwargs = checkpoint_parser(checkpoint_test)
 for k in kwargs.keys():
@@ -156,10 +160,10 @@ for i in range(len(dataset)):#5469
 total_time = {}
 total_time["initial"]=initial_saver
 if losstype=='FOCAL':
-    with open(Root+f'SCAN/output_SCAN/Focal_{input_d}_Maxpool_{mp}_alpha{a}g{g}_timeinfo.pkl', 'wb') as f:
+    with open(Root+f'SCAN/output_SCAN/Focal_{input_d}_Maxpool_{mp}_{testing}_alpha{a}g{g}_timeinfo.pkl', 'wb') as f:
         pickle.dump(total_time, f)
 else:
-    with open(Root+f'SCAN/output_SCAN/BCElogits_{input_d}_Maxpool_{mp}_timeinfo.pkl', 'wb') as f:
+    with open(Root+f'SCAN/output_SCAN/BCElogits_{input_d}_Maxpool_{mp}_{testing}_timeinfo.pkl', 'wb') as f:
         pickle.dump(total_time, f)
 
 
@@ -184,7 +188,7 @@ criterion = Focalloss()
 loss_dict = {i:[] for i in range(target_len)} 
 #print(loss_dict) {0:[]}
 
-model.eval()
+model.eval() #轉到eval模式後不影響batchnorm and dropout layer的進行
 loss_sum= 0
 loss_p_sum=0
 loss_n_sum=0
@@ -198,38 +202,24 @@ with torch.no_grad():
     in_list =[]
     out_list = []
     target_list=[]
+    #inp : (batchsize, seq, radar, x, y)
+    #tar : (batchsize, seq, x, y)
+    #out : (seq, batchsize, x, y)
     for batch in tqdm(loader):
-        #print(np.array(batch[1]).shape)
         inp,target = batch
-        # if torch.max(inp).item() > 5:
-        #     print(torch.max(inp).item())
         batch_size_in= inp.shape[0]
         inp_size = inp.shape
         tar_size = target.shape
-        #print(batch_size_in)
-        #print(inp.shape)   #16 6 2 120 120(batchsize, seq, radar, x,y)
-        #print(target.shape) #16 1 120 120(batchsize, seq, x,y)
         inp= inp.cuda()
         target = target.cuda()
         output= model(inp)
-        #print(output.shape) #1 5469 120 120
         inp = inp.cpu()
         target = target.cpu()
         output = output.cpu()
         in_list = np.append(in_list , np.array(inp).reshape(-1))
         out_list = np.append(out_list , np.array(output).reshape(-1))
         target_list = np.append(target_list , np.array(target).reshape(-1))
-        # tmp['inp'] =in_list
-        # tmp['out']= out_list
-        # tmp['target'] = target_list
-        # if losstype=='FOCAL':
-        #     with open(Root+f'SCAN/output_SCAN/input_onlyscan/Focal_{input_d}_Maxpool_{mp}_alpha{a}g{g}_data.pkl', 'wb') as f:
-        #         pickle.dump(tmp, f)
-        # else:
-        #     with open(Root+f'SCAN/output_SCAN/input_onlyscan/BCElogits_{input_d}_Maxpool_{mp}_data.pkl', 'wb') as f:
-        #         pickle.dump(tmp, f)
-        for t in range(target_len): 
-                     
+        for t in range(target_len):          
             output_t = output[t:t+1,...]   
             target_t = target[:,t:t+1,:,:]        
             output_t = output_t.permute(1,0,2,3)
@@ -242,6 +232,7 @@ with torch.no_grad():
             #For BCE
                 loss_dict[t].append(nn.BCEWithLogitsLoss()(output_t, target_t).item())
                 loss_sum+= nn.BCEWithLogitsLoss()(output_t, target_t).item()*batch_size_in
+   
         #選出答案為+，預報的分數，以及答案為-，預報的分數
         p_idx=torch.where(target==1)
         output=output.permute(1,0,2,3)
@@ -272,10 +263,10 @@ with torch.no_grad():
     tmp['out']= out_list
     tmp['target'] = target_list
     if losstype=='FOCAL':
-        with open(Root+f'SCAN/output_SCAN/Focal_{input_d}_Maxpool_{mp}_alpha{a}g{g}_data.pkl', 'wb') as f:
+        with open(Root+f'SCAN/output_SCAN/Focal_{input_d}_Maxpool_{mp}_{testing}_alpha{a}g{g}_data.pkl', 'wb') as f:
             pickle.dump(tmp, f)
     else:
-        with open(Root+f'SCAN/output_SCAN/BCElogits_{input_d}_Maxpool_{mp}_data.pkl', 'wb') as f:
+        with open(Root+f'SCAN/output_SCAN/BCElogits_{input_d}_Maxpool_{mp}_{testing}_data.pkl', 'wb') as f:
             pickle.dump(tmp, f)
 print('Total batchs is', N) 
 print(f'Loss {losstype}_sum is', loss_sum)
@@ -290,10 +281,3 @@ print('Total Ave + BCE_loss is:', round(loss_p_sum/n_p,4), 'Pt is', round(np.exp
 print('Total Ave - BCE_loss is:', round(loss_n_sum/N,4), 'Pt is', round(np.exp(round(-loss_n_sum/N,4)),2))
 print('Total Ave BCE_loss is:', round(loss_BCE_sum/N,4), 'Pt is', round(np.exp(round(-loss_BCE_sum/N,4)),2))
 print(f'負樣本為正樣本的{round(n_num/p_num,0)}倍')
-# for t in range(1,target_len+1):
-#     print(f'Avg Loss for {t-1} to {t} Hour is: ', np.mean(loss_dict[t-1]) )
-    
-# print('Total Avg Loss is : ', np.mean([np.mean(v) for _,v in loss_dict.items()]))
-
-
-

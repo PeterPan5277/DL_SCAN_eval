@@ -134,6 +134,9 @@ def PFD_2D(preds: list,
             assert hits+misses+false_alarms+correct_negatives == np.size(pred)
             success_ratio = 1 - (false_alarms / (hits + false_alarms))
             probability_detection = hits / (hits + misses)
+            print('SR', round(success_ratio,3))
+            print('POD', round(probability_detection,3))
+            print('CSI', round(hits/(hits+false_alarms+misses),3))
             ax.text(success_ratio, probability_detection, str(round(threshold,3)),
                     horizontalalignment='center',
                     verticalalignment='center',
