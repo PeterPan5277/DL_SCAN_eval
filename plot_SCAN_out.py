@@ -116,7 +116,7 @@ class Plot_scan(nn.Module):
             time_step+=1
 
             plt.tight_layout()
-            plt.savefig(self.save_dir+f'/CV/'+'Focal_'+str(self.time[case_idx])+'.png', dpi=300)
+            plt.savefig(self.save_dir+f'/CV/'+f'Loss_{lossf}+str(self.time[case_idx])'+'.png', dpi=300)
     def plot_space_correlation(self, threshold_ofeachpoint, Nofcase):
         #RADAR CV color bar
         bounds1 = [0.15,0.2,0.22,0.25,0.27,0.3,0.33,0.37,0.4]
@@ -211,79 +211,160 @@ class Plot_scan(nn.Module):
         plt.tight_layout()
         plt.savefig(self.save_dir+f'/CV_new/'+f'Focal_{inp_d}'+str(self.time[case_idx])+'.png', dpi=300)
         plt.close()
-    def plot_pcolor(self, case_idx, best, case_seq, top, grid_thresh):
+
+    def plot_pcolor(self, case_idx, best, case_seq, top, grid_thresh, mask, more_SCAN):
         if mp=='YES':
             grid = 20
         else:
             grid = 120
+        if mask:
+            cmap = mpl.colors.ListedColormap(['w','r'])
+            bounds = [-0.1,0.5,1.1]
+        else:
+            #若沒有門檻的話
+            cmap = plt.cm.get_cmap('Reds')
+            bounds = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7]
+        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
         mat = sio.loadmat('city_lonlat_region5.mat')
         citylon = mat['citylon']
         citylat = mat['citylat']
         del mat
+        interval_time = 6 #每幾分鐘畫一筆
         lon=np.linspace(120.68105,122.17745,grid) # resolution=1.3 km
         lat=np.linspace(24.0675,25.56595,grid)
         lon2d, lat2d = np.meshgrid(lon, lat)
-        m = Basemap(projection='cyl', llcrnrlat=24.0675, urcrnrlat=25.56595,\
-                llcrnrlon=120.68, urcrnrlon=122.17, resolution='l', lat_ts=20) 
-        x, y = m(lon2d, lat2d)
-        #若沒有門檻的話
-        # cmap = plt.cm.get_cmap('Reds')
-        # bounds = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7]
-        #自訂color
-        cmap = mpl.colors.ListedColormap(['w','r'])
-        bounds = [-0.1,0.5,1.1]
-        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-  
-        bounds_cv = [0,0.2,0.4,0.6,0.7,0.75,0.8,0.85,0.9,0.95]
-        cmap_cv = mpl.colors.ListedColormap(['#FFFFFF', '#9CFCFF', '#03C8FF', '#059BFF', '#0363FF',
-                                   '#059902', '#39FF03', '#FFFB03', '#FFC800', '#FF9500',
-                                   '#FF0000', '#CC0000', '#990000', '#960099', '#C900CC',
-                                   '#FB00FF', '#FDC9FF'])
-        norm_cv = mpl.colors.BoundaryNorm(bounds_cv, cmap_cv.N)   
+        fig, ax = plt.subplots(3, case_seq, figsize=(10, 8.5), dpi=200, facecolor='w')
+        for time_step in range(case_seq):
+            pred = np.array(self.pred[0,case_idx+time_step*interval_time,:,:])
+            if mask: #(若有mask取0或1)
+                if grid_thresh:
+                    for idx in range(20):
+                        for jdx in range(20):
+                            #pred 1 79929 20 20
+                            if pred[idx,jdx] >= best[idx,jdx]:
+                                pred[idx,jdx]=1
+                            else:
+                                pred[idx,jdx]=0
+                else:
+                    thresh = best[0]
+                    print(thresh)
+                    pred = np.where(pred>thresh, 1, 0)
+            for y in range(3):   #y等於幾個inps, 假如有SCAN10m adn SCANtarget y=2
+                if y ==0:
+                    ax[y,time_step].set_title('Inp time:\n'+str(self.time[case_idx+time_step*interval_time]),y=1.05,fontsize=15)
+                ax[y,time_step].plot(citylon,citylat,'k',linewidth=0.6)
+                ax[y,time_step].axis([120.6875, 122.1875, 24.0625, 25.5625])# whole area [119, 123, 21, 26]
+                ax[y,time_step].set_aspect('equal')
+            
+                if y ==0: #觀測
+                    #print(np.array(inp_last10m_max).shape)  5469,6,20,20      
+                    im=ax[y,time_step].pcolormesh(lon2d, lat2d, (self.target[case_idx+time_step*interval_time,0,:,:]), edgecolors='none',
+                                        shading='auto', norm=norm, cmap=cmap)
+                    ax[y,time_step].set_ylabel('GT',rotation=0,fontsize=10) #設定每個小圖的y
+                    ax[y,time_step].yaxis.set_label_coords(-0.2,0.9) #設定ylabel位置
+                    #if time_step == case_seq-1:
+                    #    cbar = fig.colorbar(im, ax=ax[y,time_step], orientation='vertical')
+                elif y ==1: #預報
+                    im=ax[y,time_step].pcolormesh(lon2d, lat2d, pred, edgecolors='none',
+                                        shading='auto',norm=norm,cmap=cmap)
+                    ax[y,time_step].set_ylabel('pred',rotation=0,fontsize=10) #設定每個小圖的y
+                    ax[y,time_step].yaxis.set_label_coords(-0.2,0.9) #設定ylabel位置
+                    #if time_step == case_seq-1:
+                    #cbar = fig.colorbar(im, ax=ax[y,time_step], orientation='vertical')
+                elif y==2: #基準BASELINE
+                    inp_last10m_max = (nn.MaxPool2d(6)(self.inp[:,:,0,...]))   #只取0(inp中的scan)做MAXPOOL
+                    #print(np.array(inp_last10m_max).shape)  5469,6,20,20      
+                    im=ax[y,time_step].pcolormesh(lon2d, lat2d, (inp_last10m_max[case_idx+time_step*interval_time,-1,...]), edgecolors='none',
+                                        shading='auto', norm=norm, cmap=cmap)
+                    ax[y,time_step].set_ylabel('Baseline',rotation=0,fontsize=10) #設定每個小圖的y
+                    ax[y,time_step].yaxis.set_label_coords(-0.2,0.9) #設定ylabel位置
 
-        fig=plt.figure(figsize=(10,8))
-        
-        time_step=1
-        
-        for i in range(0, 6*(case_seq-1)+1 ,6):
-            pred = np.array(self.pred[0,case_idx+i,:,:])
-            if grid_thresh:
-                for idx in range(20):
-                    for jdx in range(20):
-                        #pred 1 79929 20 20
-                        if pred[idx,jdx] >= best[idx,jdx]:
-                            pred[idx,jdx]=1
-                        else:
-                            pred[idx,jdx]=0
-            else:
-                thresh = best[0]
-                print(thresh)
-                pred = np.where(pred>thresh, 1, 0)
-            ax1=plt.subplot(2,case_seq,time_step)
-            #m.fillcontinents()
-            m.drawcoastlines()
-            m.drawparallels(np.arange(20,27,1),labels=[1,1,0,1], fontsize=8)
-            m.drawmeridians(np.arange(118,124,1),labels=[1,1,0,1], rotation=45, fontsize=8)    
-            m.pcolormesh(x, y, (self.target[case_idx+i,0,:,:]), zorder=0, norm=norm, cmap=cmap)
-            #m.colorbar(location='right',pad=0.4)
-            ax1.set_title(self.time[case_idx+i],y=1.05,fontsize=15)
-            ax1.set_ylabel('GT',rotation=0,fontsize=10) #設定每個小圖的y
-            ax1.yaxis.set_label_coords(-0.2,0.9) #設定ylabel位置
-            #
-            ax2=plt.subplot(2,case_seq,time_step+case_seq)
-            #m.fillcontinents()
-            m.drawcoastlines()
-            m.drawparallels(np.arange(20,27,1),labels=[1,1,0,1], fontsize=8)
-            m.drawmeridians(np.arange(118,124,1),labels=[1,1,0,1], rotation=45, fontsize=8) 
-            m.pcolormesh(x, y, pred ,norm=norm, cmap=cmap ,zorder=0) 
-            #plt.colorbar()       
-            ax2.set_ylabel('Pred\n'+str({inp_d}),rotation=0,fontsize=10)
-            ax2.yaxis.set_label_coords(-0.2,0.9)
-            time_step+=1
-            plt.tight_layout()
-            #plt.suptitle('Predicts 0-1 hr SCAN dots(With Threshold):',fontsize=20)
-            plt.savefig(self.save_dir+'/contour/'+f'grid_{grid_thresh}_{lossf}_{top}_{inp_d}_a{a}g{g}_Maxpool_{mp}_'+str(self.time[case_idx])+'_Thresholds'+'.png', dpi=300)
+                ax[y,time_step].set_xticks([])
+                ax[y,time_step].set_yticks([])
+        # fig.subplots_adjust(right=0.8)
+        # cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+        # fig.colorbar(im, cax=cbar_ax)
+        plt.tight_layout()
+        directory = self.save_dir+'/contour/'+f'grid_{grid_thresh}_moreSCAN_{more_SCAN}_{lossf}_{top}_{inp_d}_a{a}g{g}_Maxpool_{mp}/'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        plt.savefig(directory+str(self.time[case_idx])+'.png', dpi=300)
+        #plt.savefig(self.save_dir+'/contour/'+f'grid_{grid_thresh}_{lossf}_{top}_{inp_d}_a{a}g{g}_Maxpool_{mp}_'+str(self.time[case_idx])+'_Thresholds'+'.png', dpi=300)
         plt.close()
+        
+    # def plot_pcolor(self, case_idx, best, case_seq, top, grid_thresh):
+    #     if mp=='YES':
+    #         grid = 20
+    #     else:
+    #         grid = 120
+    #     mat = sio.loadmat('city_lonlat_region5.mat')
+    #     citylon = mat['citylon']
+    #     citylat = mat['citylat']
+    #     del mat
+    #     lon=np.linspace(120.68105,122.17745,grid) # resolution=1.3 km
+    #     lat=np.linspace(24.0675,25.56595,grid)
+    #     lon2d, lat2d = np.meshgrid(lon, lat)
+    #     m = Basemap(projection='cyl', llcrnrlat=24.0675, urcrnrlat=25.56595,\
+    #             llcrnrlon=120.68, urcrnrlon=122.17, resolution='l', lat_ts=20) 
+    #     x, y = m(lon2d, lat2d)
+    #     #若沒有門檻的話
+    #     # cmap = plt.cm.get_cmap('Reds')
+    #     # bounds = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7]
+    #     #自訂color
+    #     cmap = mpl.colors.ListedColormap(['w','r'])
+    #     bounds = [-0.1,0.5,1.1]
+    #     norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+  
+    #     bounds_cv = [0,0.2,0.4,0.6,0.7,0.75,0.8,0.85,0.9,0.95]
+    #     cmap_cv = mpl.colors.ListedColormap(['#FFFFFF', '#9CFCFF', '#03C8FF', '#059BFF', '#0363FF',
+    #                                '#059902', '#39FF03', '#FFFB03', '#FFC800', '#FF9500',
+    #                                '#FF0000', '#CC0000', '#990000', '#960099', '#C900CC',
+    #                                '#FB00FF', '#FDC9FF'])
+    #     norm_cv = mpl.colors.BoundaryNorm(bounds_cv, cmap_cv.N)   
+
+    #     fig=plt.figure(figsize=(10,8))
+        
+    #     time_step=1
+        
+    #     for i in range(0, 6*(case_seq-1)+1 ,6):
+    #         pred = np.array(self.pred[0,case_idx+i,:,:])
+    #         if grid_thresh:
+    #             for idx in range(20):
+    #                 for jdx in range(20):
+    #                     #pred 1 79929 20 20
+    #                     if pred[idx,jdx] >= best[idx,jdx]:
+    #                         pred[idx,jdx]=1
+    #                     else:
+    #                         pred[idx,jdx]=0
+    #         else:
+    #             thresh = best[0]
+    #             print(thresh)
+    #             pred = np.where(pred>thresh, 1, 0)
+    #         ax1=plt.subplot(2,case_seq,time_step)
+    #         #m.fillcontinents()
+    #         m.drawcoastlines()
+    #         m.drawparallels(np.arange(20,27,1),labels=[1,1,0,1], fontsize=8)
+    #         m.drawmeridians(np.arange(118,124,1),labels=[1,1,0,1], rotation=45, fontsize=8)    
+    #         m.pcolormesh(x, y, (self.target[case_idx+i,0,:,:]), zorder=0, norm=norm, cmap=cmap)
+    #         #m.colorbar(location='right',pad=0.4)
+    #         ax1.set_title(self.time[case_idx+i],y=1.05,fontsize=15)
+    #         ax1.set_ylabel('GT',rotation=0,fontsize=10) #設定每個小圖的y
+    #         ax1.yaxis.set_label_coords(-0.2,0.9) #設定ylabel位置
+    #         #
+    #         ax2=plt.subplot(2,case_seq,time_step+case_seq)
+    #         #m.fillcontinents()
+    #         m.drawcoastlines()
+    #         m.drawparallels(np.arange(20,27,1),labels=[1,1,0,1], fontsize=8)
+    #         m.drawmeridians(np.arange(118,124,1),labels=[1,1,0,1], rotation=45, fontsize=8) 
+    #         m.pcolormesh(x, y, pred ,norm=norm, cmap=cmap ,zorder=0) 
+    #         #plt.colorbar()       
+    #         ax2.set_ylabel('Pred\n'+str({inp_d}),rotation=0,fontsize=10)
+    #         ax2.yaxis.set_label_coords(-0.2,0.9)
+    #         time_step+=1
+    #         plt.tight_layout()
+    #         #plt.suptitle('Predicts 0-1 hr SCAN dots(With Threshold):',fontsize=20)
+    #         plt.savefig(self.save_dir+'/contour/'+f'grid_{grid_thresh}_{lossf}_{top}_{inp_d}_a{a}g{g}_Maxpool_{mp}_'+str(self.time[case_idx])+'_Thresholds'+'.png', dpi=300)
+    #     plt.close()
     def Find_Optimal_Cutoff(self, fpr,tpr,threshold):
         i = np.arange(len(tpr)) #i=[0,1,2,..240] total 241    
         roc = pd.DataFrame({'tf' : pd.Series(tpr-(1-fpr), index=i), 
@@ -436,7 +517,7 @@ class Plot_scan(nn.Module):
             print('TP:',TP,'TN:',TN,'FP:',FP,'FN:',FN) #幾乎都是FP(也就是明明沒有卻預報有)
 
 
-    def plot_PFD(self, is_case, best, case_idx, grid_thresh, top):
+    def plot_PFD(self, is_case, best, case_idx, grid_thresh, top, more_SCAN):
         # self.pred= data_dic['out'] #1 2133 120 120 (seq/batch/x/y)
         # self.inp = data_dic['inp'] #2133 6 1 120 120 (batch/seq/radar/x/y)
         # self.target = data_dic['target'] #2133 1 120 120 (batch/seq/x/y)
@@ -459,7 +540,7 @@ class Plot_scan(nn.Module):
                 threshold=[0,1.0] #分成0和1兩個標準
                 PFD_2D(preds=preds, label=label, thresholds=threshold, names=['pred','BaseLine'])
                 plt.tight_layout()
-                plt.savefig(self.save_dir+'PFD/'+f'Case_top{top}_{lossf}_{inp_d}__Maxpool_{mp}_alpha{a}g{g}'+str(self.time[case_idx])+'.png', dpi=300)
+                plt.savefig(self.save_dir+'PFD/'+f'Case_moreSCAN_{more_SCAN}_top{top}_{lossf}_{inp_d}__Maxpool_{mp}_alpha{a}g{g}'+str(self.time[case_idx])+'.png', dpi=300)
             else:
                 #若best為一個統一值
                 pred1 = np.where(pred>=best[0],1,0)
@@ -469,7 +550,7 @@ class Plot_scan(nn.Module):
                 # pred5 = np.where(pred>=best[4],1,0)
                 preds=[pred1, np.array(self.baseline)]
                 #preds=[pred1, pred2, pred3, pred4, pred5, np.array(self.baseline)]
-                threshold=[0,1.0] #分成0和1兩個標準
+                threshold=[0,1] #分成0和1兩個標準
                 PFD_2D(preds=preds, label=label, thresholds=threshold, names=['TOP3%','10%','30%','40%','50%','BaseLine'])
                 plt.tight_layout()
                 plt.savefig(self.save_dir+'PFD/'+f'Casenongrid_{lossf}_{inp_d}__Maxpool_{mp}_alpha{a}g{g}'+str(self.time[case_idx])+'.png', dpi=300)
@@ -498,7 +579,7 @@ class Plot_scan(nn.Module):
             plt.tight_layout()
             plt.savefig(self.save_dir+'PFD/'+f'All_{lossf}_{inp_d}__Maxpool_{mp}_alpha{a}g{g}'+'.png', dpi=300)
     def last10m_Base(self, case_idx, case_seq): 
-        #Scan baseliney
+        #Scan baseline
         cmap = mpl.colors.ListedColormap(['w','r'])
         bounds = [-0.1,0.5,1.1]
         norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
@@ -547,7 +628,8 @@ class Plot_scan(nn.Module):
         if is_case:
             case_seq=3 #幾個時間序列
             top= 0.4#取前幾%
-            grid_thresh = False
+            grid_thresh = True
+            mask = True #(代表是否要透過mask threshold畫最終結果)
             AUC = False
             if AUC:
                 best=self.plot_ROC(case_idx, is_case, case_seq)#先找出thereshold在把這個值丟入下一行去決定閥值        
@@ -556,10 +638,10 @@ class Plot_scan(nn.Module):
                     if testing =='201920':
                         best, Nofcase = threshold_points(self.pred, self.target, self.save_dir, top)
                         tmp= {'best':best, 'Nofcase':Nofcase}
-                        with open(f'/wk171/peterpan/SCAN/SCAN_eval/grid_saver/grid_threshold_{lossf}_a={a}_{top}%.pkl', 'wb') as f:
+                        with open(f'/wk171/peterpan/SCAN/SCAN_eval/grid_saver/grid_threshold_moreSCAN_{more_SCAN}_{lossf}_a={a}_{top}%.pkl', 'wb') as f:
                             pickle.dump(tmp, f)
                     if testing =='2021':
-                        with open (f'/wk171/peterpan/SCAN/SCAN_eval/grid_saver/grid_threshold_{lossf}_a={a}_{top}%.pkl', 'rb') as f:               
+                        with open (f'/wk171/peterpan/SCAN/SCAN_eval/grid_saver/grid_threshold_moreSCAN_{more_SCAN}_{lossf}_a={a}_{top}%.pkl', 'rb') as f:               
                             tmp = pickle.load(f) #
                             best = tmp['best']
                             Nofcase = tmp['Nofcase']
@@ -568,17 +650,17 @@ class Plot_scan(nn.Module):
                     #top_percent = [0.4]
                     best=hist_3percent(self.pred, self.target, self.save_dir, top_percent, a, g, lossf) 
                 #
-            #self.plot_space_correlation(best, Nofcase)
-            #self.plot_pcolor(case_idx, best, case_seq,top, grid_thresh)    
-            #self.plot_hitogram(case_idx, is_case)
-            #self.cal_accuracy(case_idx, is_case, best, case_seq)
-            #self.plot_boxplot(case_idx)
-            #self.plot_PFD(is_case, best, case_idx, grid_thresh, top)
-            #burst(self.tar, self.pred)
-            #self.plot_CV(case_idx, best, case_seq)
-            #self.plot_new(case_idx, best, case_seq)
-            #self.last10m_Base(case_idx, case_seq)
-            #self.stats()   
+            if testing =='2021':
+                #self.plot_space_correlation(best, Nofcase)
+                self.plot_pcolor(case_idx, best, case_seq,top, grid_thresh, mask, more_SCAN)    
+                #self.plot_hitogram(case_idx, is_case)
+                #self.cal_accuracy(case_idx, is_case, best, case_seq)
+                #self.plot_boxplot(case_idx)
+                self.plot_PFD(is_case, best, case_idx, grid_thresh, top, more_SCAN)
+                #burst(self.tar, self.pred)
+                #self.plot_new(case_idx, best, case_seq)
+                #self.last10m_Base(case_idx, case_seq)
+                #self.stats()   
 
         
         else:
@@ -600,25 +682,29 @@ if __name__ == '__main__' :
     g=2
     lossf='BCElogits' #Focal or BCElogits
     mp='YES' #YES or other
+    more_SCAN = 'NO' # inp SCAN intensify or not
     inp_d = 'SR' #SCAN OR RADAR or SR
-    testing = '201920'
+    testing = '2021'
     if lossf =='Focal':
         if mp=='YES':
-            data_dir = f'{lossf}_{inp_d}_Maxpool_{mp}_{testing}_alpha{a}g{g}_data.pkl'
-            time_dir = f'{lossf}_{inp_d}_Maxpool_{mp}_{testing}_alpha{a}g{g}_timeinfo.pkl'
+            data_dir = f'{lossf}_{inp_d}_moreSCAN_{more_SCAN}_Maxpool_{mp}_{testing}_alpha{a}g{g}_data.pkl'
+            time_dir = f'{lossf}_{inp_d}_moreSCAN_{more_SCAN}_Maxpool_{mp}_{testing}_alpha{a}g{g}_timeinfo.pkl'
         else:
-            data_dir = f'{lossf}_{inp_d}_Maxpool_{mp}_{testing}_alpha{a}g{g}_data.pkl'
-            time_dir = f'{lossf}_{inp_d}_Maxpool_{mp}_{testing}_alpha{a}g{g}_timeinfo.pkl'
+            data_dir = f'{lossf}_{inp_d}_moreSCAN_{more_SCAN}_Maxpool_{mp}_{testing}_alpha{a}g{g}_data.pkl'
+            time_dir = f'{lossf}_{inp_d}_moreSCAN_{more_SCAN}_Maxpool_{mp}_{testing}_alpha{a}g{g}_timeinfo.pkl'
     else:
         if mp=='YES':
-            data_dir = f'{lossf}_{inp_d}_Maxpool_{mp}_{testing}_data.pkl'
-            time_dir = f'{lossf}_{inp_d}_Maxpool_{mp}_{testing}_timeinfo.pkl'
+            data_dir = f'{lossf}_{inp_d}_moreSCAN_{more_SCAN}_Maxpool_{mp}_{testing}_data.pkl'
+            time_dir = f'{lossf}_{inp_d}_moreSCAN_{more_SCAN}_Maxpool_{mp}_{testing}_timeinfo.pkl'
         else:
-            data_dir = f'{lossf}_{inp_d}_Maxpool_{mp}_{testing}_data.pkl'
-            time_dir = f'{lossf}_{inp_d}_Maxpool_{mp}_{testing}_timeinfo.pkl'
+            data_dir = f'{lossf}_{inp_d}_moreSCAN_{more_SCAN}_Maxpool_{mp}_{testing}_data.pkl'
+            time_dir = f'{lossf}_{inp_d}_moreSCAN_{more_SCAN}_Maxpool_{mp}_{testing}_timeinfo.pkl'
+    #test data 這是暫時for test moreSCAN用~ 之後即可刪除
+    #data_dir= 'moreSCANtest.pkl'
+    #time_dir= 'moreSCANtest_time.pkl'
     p = Plot_scan(root, plot_save_dir, data_dir, time_dir)
 
-    for i in range(1): #2021/6/4/0400 TS 2018/5/7/1400鋒面 2021/6/22/0400 滯留鋒面
-        case = datetime(2021,6,4,4+i*3,0)#choose the interesting case time
+    for i in range(1): #2021/6/4/0400 TS 2018/5/7/1200鋒面 2021/6/22/0400 滯留鋒面
+        case = datetime(2018,5,7,17+i*3,0)#choose the interesting case time
         p.main(is_case=True, case=case)
     

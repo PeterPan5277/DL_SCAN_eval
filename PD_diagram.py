@@ -137,7 +137,7 @@ def PFD_2D(preds: list,
             print('SR', round(success_ratio,3))
             print('POD', round(probability_detection,3))
             print('CSI', round(hits/(hits+false_alarms+misses),3))
-            ax.text(success_ratio, probability_detection, str(round(threshold,3)),
+            ax.text(success_ratio, probability_detection, str(int(threshold)),
                     horizontalalignment='center',
                     verticalalignment='center',
                     color=colors[id],
